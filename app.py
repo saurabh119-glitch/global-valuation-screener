@@ -1,6 +1,8 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+import time
+import random
 
 st.set_page_config(page_title="Global Valuation Screener", page_icon="📈")
 st.title("🌍 Global Stock Valuation Screener (Educational)")
@@ -26,22 +28,27 @@ if ticker_input:
     ticker = ticker_clean.upper()
 
     @st.cache_data(ttl=3600)  # Cache for 1 hour
-    def get_stock_data(ticker):
-        try:
-            stock = yf.Ticker(ticker)
-            info = stock.info
-            hist = stock.history(period="1d")
-            current_price = hist['Close'].iloc[-1] if len(hist) > 0 else "N/A"
-            return info, current_price
-        except Exception as e:
-            return None, f"Error: {str(e)}"
+    def get_stock_data_with_retry(ticker, max_retries=3):
+        for attempt in range(max_retries):
+            try:
+                stock = yf.Ticker(ticker)
+                info = stock.info
+                hist = stock.history(period="1d")
+                current_price = hist['Close'].iloc[-1] if len(hist) > 0 else "N/A"
+                return info, current_price
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    wait_time = 2 + random.uniform(0, 1)  # Wait 2–3 seconds
+                    time.sleep(wait_time)
+                else:
+                    return None, f"Error after {max_retries} attempts: {str(e)}"
 
     with st.spinner(f"Fetching data for {ticker}..."):
-        info, current_price = get_stock_data(ticker)
+        info, current_price = get_stock_data_with_retry(ticker)
 
         if info is None:
-            st.error(current_price)  # Show error message
-            st.info("Try a different ticker like `AAPL`, `TCS.NS`, or `RELIANCE.NS`.")
+            st.error(current_price)
+            st.info("Try again later or use a different ticker like `AAPL`, `TCS.NS`, or `RELIANCE.NS`.")
             st.stop()
 
         # Get company name and exchange
