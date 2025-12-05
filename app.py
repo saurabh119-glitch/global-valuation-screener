@@ -1,13 +1,18 @@
-apikey=tr5R9ln7aSIeL2PSuaUibD86dYJPNp7E 
-
 import streamlit as st
 import yfinance as yf
 import requests
 import pandas as pd
+import os  # ← Add this
 
-# Config
-tr5R9ln7aSIeL2PSuaUibD86dYJPNp7E = "tr5R9ln7aSIeL2PSuaUibD86dYJPNp7E"  # ← Replace with your key
-FMP_BASE = "https://financialmodelingprep.com/api/v3"
+# ✅ Load API key from Streamlit Cloud Secrets (secure!)
+FMP_API_KEY = os.getenv("FMP_API_KEY")
+
+# Handle missing key gracefully
+if not FMP_API_KEY:
+    st.error("❌ FMP_API_KEY is not set. Please add it in Streamlit Cloud → App Settings → Secrets")
+    st.stop()
+
+FMP_BASE = "https://financialmodelingprep.com/api/v3"  # ← Removed extra space
 
 st.set_page_config(page_title="Global Valuation Screener", page_icon="📈")
 st.title("🌍 Global Stock Valuation Screener (Educational)")
@@ -27,7 +32,7 @@ if ticker:
     with st.spinner(f"Fetching data for {ticker}..."):
         try:
             # 1. Get company profile from FMP
-            profile_url = f"{FMP_BASE}/profile/{ticker}?apikey={tr5R9ln7aSIeL2PSuaUibD86dYJPNp7E}"
+            profile_url = f"{FMP_BASE}/profile/{ticker}?apikey={FMP_API_KEY}"  # ← Use FMP_API_KEY
             profile = requests.get(profile_url).json()
             
             if not profile:
@@ -39,7 +44,7 @@ if ticker:
             exchange = profile["exchangeShortName"]
             
             # 2. Get key metrics
-            metrics_url = f"{FMP_BASE}/key-metrics/{ticker}?apikey={tr5R9ln7aSIeL2PSuaUibD86dYJPNp7E}"
+            metrics_url = f"{FMP_BASE}/key-metrics/{ticker}?apikey={FMP_API_KEY}"  # ← Use FMP_API_KEY
             metrics = requests.get(metrics_url).json()
             
             if not metrics:
