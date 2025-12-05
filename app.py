@@ -25,57 +25,63 @@ if ticker_input:
         ticker_clean = ticker_clean[:-3] + '.BO'
     ticker = ticker_clean.upper()
 
-    with st.spinner(f"Fetching data for {ticker}..."):
+    @st.cache_data(ttl=3600)  # Cache for 1 hour
+    def get_stock_data(ticker):
         try:
             stock = yf.Ticker(ticker)
             info = stock.info
-
-            # Get company name and exchange
-            company_name = info.get("longName", ticker)
-            exchange = info.get("exchange", "N/A")
-
-            # Get current price
             hist = stock.history(period="1d")
             current_price = hist['Close'].iloc[-1] if len(hist) > 0 else "N/A"
-
-            # Display header
-            st.subheader(f"{company_name} ({ticker}) • {exchange}")
-            st.metric("Current Price", f"${current_price:.2f}" if isinstance(current_price, float) else current_price)
-
-            # Valuation metrics from Yahoo Finance
-            st.subheader("Valuation Metrics (Latest)")
-            metrics_list = [
-                ("P/E Ratio", info.get("trailingPE", "N/A")),
-                ("P/B Ratio", info.get("priceToBook", "N/A")),
-                ("PEG Ratio", info.get("pegRatio", "N/A")),
-                ("Dividend Yield", f"{info.get('dividendYield', 0)*100:.2f}%" if info.get("dividendYield") else "N/A"),
-                ("50-Day MA", info.get("fiftyDayAverage", "N/A")),
-                ("200-Day MA", info.get("twoHundredDayAverage", "N/A"))
-            ]
-
-            df = pd.DataFrame(metrics_list, columns=["Metric", "Value"])
-            st.table(df)
-
-            # Educational insights
-            st.subheader("Educational Insights")
-            pe = info.get("trailingPE", 1000)
-            pb = info.get("priceToBook", 1000)
-            peg = info.get("pegRatio", 1000)
-
-            insights = []
-            if pe < 15: insights.append("✅ P/E suggests undervaluation")
-            elif pe > 25: insights.append("⚠️ P/E suggests overvaluation")
-            if pb < 1.5: insights.append("✅ P/B suggests asset-backed value")
-            elif pb > 3: insights.append("⚠️ P/B suggests premium pricing")
-            if peg < 1: insights.append("✅ PEG < 1: growth may be undervalued")
-            elif peg > 2: insights.append("⚠️ PEG > 2: growth may be overpriced")
-
-            for msg in insights or ["No strong valuation signals detected."]:
-                st.info(msg)
-
+            return info, current_price
         except Exception as e:
-            st.error(f"🚨 Error: {str(e)}")
-            st.info("Try a valid ticker like `AAPL`, `TCS.NS`, or `RELIANCE.NS`.")
+            return None, f"Error: {str(e)}"
+
+    with st.spinner(f"Fetching data for {ticker}..."):
+        info, current_price = get_stock_data(ticker)
+
+        if info is None:
+            st.error(current_price)  # Show error message
+            st.info("Try a different ticker like `AAPL`, `TCS.NS`, or `RELIANCE.NS`.")
+            st.stop()
+
+        # Get company name and exchange
+        company_name = info.get("longName", ticker)
+        exchange = info.get("exchange", "N/A")
+
+        # Display header
+        st.subheader(f"{company_name} ({ticker}) • {exchange}")
+        st.metric("Current Price", f"${current_price:.2f}" if isinstance(current_price, float) else current_price)
+
+        # Valuation metrics from Yahoo Finance
+        st.subheader("Valuation Metrics (Latest)")
+        metrics_list = [
+            ("P/E Ratio", info.get("trailingPE", "N/A")),
+            ("P/B Ratio", info.get("priceToBook", "N/A")),
+            ("PEG Ratio", info.get("pegRatio", "N/A")),
+            ("Dividend Yield", f"{info.get('dividendYield', 0)*100:.2f}%" if info.get("dividendYield") else "N/A"),
+            ("50-Day MA", info.get("fiftyDayAverage", "N/A")),
+            ("200-Day MA", info.get("twoHundredDayAverage", "N/A"))
+        ]
+
+        df = pd.DataFrame(metrics_list, columns=["Metric", "Value"])
+        st.table(df)
+
+        # Educational insights
+        st.subheader("Educational Insights")
+        pe = info.get("trailingPE", 1000)
+        pb = info.get("priceToBook", 1000)
+        peg = info.get("pegRatio", 1000)
+
+        insights = []
+        if pe < 15: insights.append("✅ P/E suggests undervaluation")
+        elif pe > 25: insights.append("⚠️ P/E suggests overvaluation")
+        if pb < 1.5: insights.append("✅ P/B suggests asset-backed value")
+        elif pb > 3: insights.append("⚠️ P/B suggests premium pricing")
+        if peg < 1: insights.append("✅ PEG < 1: growth may be undervalued")
+        elif peg > 2: insights.append("⚠️ PEG > 2: growth may be overpriced")
+
+        for msg in insights or ["No strong valuation signals detected."]:
+            st.info(msg)
 
 # Ticker guide
 st.markdown("---")
