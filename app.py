@@ -84,11 +84,6 @@ if ticker_input:
             if low_elem:
                 data['52w_low'] = low_elem.find_next('div').get_text(strip=True)
             
-            # Dividend Yield (from Corporate Actions)
-            dividend_yield = "N/A"
-            # We'll add this later via corporate actions page
-            data['dividend_yield'] = dividend_yield
-            
             # Trading Status
             status_elem = soup.find('div', text=lambda x: x and 'Trading Status' in x)
             if status_elem:
@@ -125,10 +120,6 @@ if ticker_input:
         ]
         df = pd.DataFrame(metrics_list, columns=["Metric", "Value"])
         st.table(df)
-
-        # Add Corporate Actions (Dividends, Splits) — Future Enhancement
-        st.subheader("Corporate Actions (Coming Soon)")
-        st.info("💡 We’re adding dividend history, bonus shares, and splits from corporateactions.nseindia.com — stay tuned!")
 
         # Educational Insights
         st.subheader("Educational Insights")
