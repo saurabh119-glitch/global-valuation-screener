@@ -57,25 +57,37 @@ if ticker_input:
             pe_elem = soup.find('li', text=lambda x: x and 'P/E Ratio' in x)
             if pe_elem:
                 pe_text = pe_elem.find_next('span').get_text(strip=True)
-                metrics['pe_ratio'] = float(pe_text.replace(',', '')) if pe_text.replace(',', '').replace('.', '').isdigit() else "N/A"
+                try:
+                    metrics['pe_ratio'] = float(pe_text.replace(',', ''))
+                except ValueError:
+                    metrics['pe_ratio'] = "N/A"
             
             # P/B Ratio
             pb_elem = soup.find('li', text=lambda x: x and 'P/B Ratio' in x)
             if pb_elem:
                 pb_text = pb_elem.find_next('span').get_text(strip=True)
-                metrics['pb_ratio'] = float(pb_text.replace(',', '')) if pb_text.replace(',', '').replace('.', '').isdigit() else "N/A"
+                try:
+                    metrics['pb_ratio'] = float(pb_text.replace(',', ''))
+                except ValueError:
+                    metrics['pb_ratio'] = "N/A"
             
             # Dividend Yield
             div_elem = soup.find('li', text=lambda x: x and 'Dividend Yield' in x)
             if div_elem:
                 div_text = div_elem.find_next('span').get_text(strip=True)
-                metrics['dividend_yield'] = float(div_text.replace('%', '').replace(',', '')) if '%' in div_text else "N/A"
+                try:
+                    metrics['dividend_yield'] = float(div_text.replace('%', '').replace(',', ''))
+                except ValueError:
+                    metrics['dividend_yield'] = "N/A"
             
-            # PEG Ratio
-            peg_elem = soup.find('li', text=lambda x: x and 'PEG Ratio' in x)
-            if peg_elem:
-                peg_text = peg_elem.find_next('span').get_text(strip=True)
-                metrics['peg_ratio'] = float(peg_text.replace(',', '')) if peg_text.replace(',', '').replace('.', '').isdigit() else "N/A"
+            # PEG Ratio (from Screener.in's consolidated page)
+            peg_div = soup.find('div', text=lambda x: x and 'PEG Ratio' in x)
+            if peg_div:
+                peg_value = peg_div.find_next('div').get_text(strip=True)
+                try:
+                    metrics['peg_ratio'] = float(peg_value.replace(',', ''))
+                except ValueError:
+                    metrics['peg_ratio'] = "N/A"
             
             return metrics
             
