@@ -136,14 +136,11 @@ if ticker_input:
             "200-Day MA": info.get("twoHundredDayAverage", "N/A")
         }
 
-        # If Screener data is available, update metrics
-        if screener_data:
-            if screener_data['metrics'].get('pe_ratio') != "N/A":
-                final_metrics["P/E Ratio"] = screener_data['metrics']['pe_ratio']
-            if screener_data['metrics'].get('pb_ratio') != "N/A":
-                final_metrics["P/B Ratio"] = screener_data['metrics']['pb_ratio']
-            if screener_data['metrics'].get('dividend_yield') != "N/A":
-                final_metrics["Dividend Yield"] = screener_data['metrics']['dividend_yield']
+        # If Screener data is available, update metrics safely
+        if screener_data and 'metrics' in screener_data:
+            final_metrics["P/E Ratio"] = screener_data['metrics'].get('pe_ratio', final_metrics["P/E Ratio"])
+            final_metrics["P/B Ratio"] = screener_data['metrics'].get('pb_ratio', final_metrics["P/B Ratio"])
+            final_metrics["Dividend Yield"] = screener_data['metrics'].get('dividend_yield', final_metrics["Dividend Yield"])
 
         # Display header
         company_name = info.get("longName", symbol)
