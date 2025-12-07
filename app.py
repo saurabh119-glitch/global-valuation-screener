@@ -1,4 +1,5 @@
 import streamlit as st
+import yfinance as yf
 import pandas as pd
 import time
 import random
@@ -7,7 +8,7 @@ from bs4 import BeautifulSoup
 
 st.set_page_config(page_title="NSE Valuation Screener", page_icon="📈")
 st.title("🇮🇳 NSE Stock Valuation Screener (Educational)")
-st.caption("Compare metrics for NSE-listed stocks using NSE India + Screener.in + Moneycontrol. Not financial advice.")
+st.caption("Compare metrics for NSE-listed stocks using Moneycontrol + Yahoo Finance. Not financial advice.")
 
 # Mandatory Disclaimer
 st.warning("""
@@ -24,137 +25,15 @@ if ticker_input:
     symbol = ticker_input.strip().upper()
     
     @st.cache_data(ttl=3600)
-    def get_nse_price(symbol):
-        url = f"https://www.nseindia.com/get-quote/equity/{symbol}"
-        
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'same-origin',
-            'Sec-Fetch-User': '?1',
-            'Cache-Control': 'max-age=0'
-        }
-        
+    def get_yahoo_data(symbol):
         try:
-            session = requests.Session()
-            session.headers.update(headers)
-            
-            # First, get cookies by visiting homepage
-            session.get("https://www.nseindia.com", timeout=10)
-            
-            # Then fetch quote page
-            response = session.get(url, timeout=10)
-            
-            if response.status_code != 200:
-                return "N/A"
-            
-            soup = BeautifulSoup(response.content, 'html.parser')
-            
-            # Extract current price
-            price_elem = soup.find('div', class_='last-price')
-            if price_elem:
-                return price_elem.get_text(strip=True).replace(',', '')
-            
-            return "N/A"
-            
+            stock = yf.Ticker(symbol + ".NS")  # Add .NS for Indian stocks
+            info = stock.info
+            hist = stock.history(period="1d")
+            current_price = hist['Close'].iloc[-1] if len(hist) > 0 else "N/A"
+            return info, current_price
         except Exception as e:
-            return "N/A"
-
-    @st.cache_data(ttl=3600)
-    def scrape_screener_consolidated(symbol):
-        # Convert to Screener format (e.g., RELIANCE → reliance)
-        screener_id = symbol.lower()
-        url = f"https://www.screener.in/company/{screener_id}/consolidated/"
-        
-        try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'same-origin',
-                'Sec-Fetch-User': '?1',
-                'Cache-Control': 'max-age=0'
-            }
-            
-            session = requests.Session()
-            session.headers.update(headers)
-            
-            # First, get cookies by visiting homepage
-            session.get("https://www.screener.in", timeout=10)
-            
-            # Then fetch consolidated page
-            response = session.get(url, timeout=10)
-            
-            if response.status_code != 200:
-                return None
-            
-            soup = BeautifulSoup(response.content, 'html.parser')
-            
-            # Extract company name
-            company_name_elem = soup.find('h1', class_='company-name')
-            company_name = company_name_elem.get_text(strip=True) if company_name_elem else symbol
-            
-            # Extract metrics from "Ratios" section
-            ratios_section = soup.find('section', id='ratios')
-            if not ratios_section:
-                return None
-            
-            metrics = {}
-            
-            # P/E Ratio
-            pe_div = ratios_section.find('div', text=lambda x: x and 'Stock P/E' in x)
-            if pe_div:
-                pe_value = pe_div.find_next('div').get_text(strip=True)
-                try:
-                    metrics['pe_ratio'] = float(pe_value.replace(',', ''))
-                except ValueError:
-                    metrics['pe_ratio'] = "N/A"
-            
-            # P/B Ratio
-            pb_div = ratios_section.find('div', text=lambda x: x and 'Book Value' in x)
-            if pb_div:
-                pb_value = pb_div.find_next('div').get_text(strip=True)
-                try:
-                    metrics['pb_ratio'] = float(pb_value.replace(',', ''))
-                except ValueError:
-                    metrics['pb_ratio'] = "N/A"
-            
-            # Dividend Yield
-            div_div = ratios_section.find('div', text=lambda x: x and 'Dividend Yield' in x)
-            if div_div:
-                div_value = div_div.find_next('div').get_text(strip=True)
-                try:
-                    metrics['dividend_yield'] = float(div_value.replace('%', '').replace(',', ''))
-                except ValueError:
-                    metrics['dividend_yield'] = "N/A"
-            
-            # PEG Ratio
-            peg_div = ratios_section.find('div', text=lambda x: x and 'PEG Ratio' in x)
-            if peg_div:
-                peg_value = peg_div.find_next('div').get_text(strip=True)
-                try:
-                    metrics['peg_ratio'] = float(peg_value.replace(',', ''))
-                except ValueError:
-                    metrics['peg_ratio'] = "N/A"
-            
-            return {
-                'company_name': company_name,
-                'metrics': metrics
-            }
-            
-        except Exception as e:
-            return None
+            return None, f"Error: {str(e)}"
 
     @st.cache_data(ttl=3600)
     def scrape_moneycontrol(symbol):
@@ -236,44 +115,41 @@ if ticker_input:
             return None
 
     with st.spinner(f"Fetching data for {symbol}..."):
-        # Get NSE price (real-time)
-        nse_price = get_nse_price(symbol)
-        
-        # Get Screener data
-        screener_data = scrape_screener_consolidated(symbol)
-        
+        # Get Yahoo data
+        info, current_price = get_yahoo_data(symbol)
+        if info is None:
+            st.error(current_price)
+            st.info("Try a different ticker like `TCS`, `RELIANCE`, or `HDFCBANK`.")
+            st.stop()
+
         # Get Moneycontrol data
         moneycontrol_data = scrape_moneycontrol(symbol)
         
         # Initialize final metrics
         final_metrics = {
-            "P/E Ratio": "N/A",
-            "P/B Ratio": "N/A",
-            "PEG Ratio": "N/A",
-            "Dividend Yield": "N/A",
-            "50-Day MA": "N/A",
-            "200-Day MA": "N/A"
+            "P/E Ratio": info.get("trailingPE", "N/A"),
+            "P/B Ratio": info.get("priceToBook", "N/A"),
+            "PEG Ratio": info.get("pegRatio", "N/A"),
+            "Dividend Yield": info.get("dividendYield", 0)*100 if info.get("dividendYield") else "N/A",
+            "50-Day MA": info.get("fiftyDayAverage", "N/A"),
+            "200-Day MA": info.get("twoHundredDayAverage", "N/A")
         }
 
-        # Priority: Screener.in > Moneycontrol > Fallback to "N/A"
-        if screener_data:
-            final_metrics["P/E Ratio"] = screener_data['metrics'].get('pe_ratio', "N/A")
-            final_metrics["P/B Ratio"] = screener_data['metrics'].get('pb_ratio', "N/A")
-            final_metrics["PEG Ratio"] = screener_data['metrics'].get('peg_ratio', "N/A")
-            final_metrics["Dividend Yield"] = screener_data['metrics'].get('dividend_yield', "N/A")
-            company_name = screener_data['company_name']
-        elif moneycontrol_data:
-            final_metrics["P/E Ratio"] = moneycontrol_data.get('pe_ratio', "N/A")
-            final_metrics["P/B Ratio"] = moneycontrol_data.get('pb_ratio', "N/A")
-            final_metrics["PEG Ratio"] = moneycontrol_data.get('peg_ratio', "N/A")
-            final_metrics["Dividend Yield"] = moneycontrol_data.get('dividend_yield', "N/A")
-            company_name = symbol
-        else:
-            company_name = symbol
+        # If Moneycontrol data is available, update metrics
+        if moneycontrol_data:
+            if moneycontrol_data.get('pe_ratio') != "N/A":
+                final_metrics["P/E Ratio"] = moneycontrol_data['pe_ratio']
+            if moneycontrol_data.get('pb_ratio') != "N/A":
+                final_metrics["P/B Ratio"] = moneycontrol_data['pb_ratio']
+            if moneycontrol_data.get('dividend_yield') != "N/A":
+                final_metrics["Dividend Yield"] = moneycontrol_data['dividend_yield']
+            if moneycontrol_data.get('peg_ratio') != "N/A":
+                final_metrics["PEG Ratio"] = moneycontrol_data['peg_ratio']
 
         # Display header
+        company_name = info.get("longName", symbol)
         st.subheader(f"{company_name} • {symbol}.NS")
-        st.metric("Current Price", f"₹{nse_price}" if nse_price != "N/A" else "N/A")
+        st.metric("Current Price", f"₹{current_price:.2f}" if isinstance(current_price, float) else current_price)
 
         # Valuation metrics table
         st.subheader("Valuation Metrics (Latest)")
@@ -314,4 +190,4 @@ st.markdown("""
 - **Not for BSE or global stocks** — this is NSE-only
 """)
 
-st.caption("Data: NSE India + Screener.in + Moneycontrol | Educational Use Only")
+st.caption("Data: Moneycontrol + Yahoo Finance | Educational Use Only")
