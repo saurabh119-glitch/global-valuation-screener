@@ -1,13 +1,14 @@
 import streamlit as st
-import requests
-from bs4 import BeautifulSoup
+import yfinance as yf
 import pandas as pd
 import time
 import random
+import requests
+from bs4 import BeautifulSoup
 
 st.set_page_config(page_title="NSE Valuation Screener", page_icon="📈")
 st.title("🇮🇳 NSE Stock Valuation Screener (Educational)")
-st.caption("Compare metrics for NSE-listed stocks using official NSE data. Not financial advice.")
+st.caption("Compare metrics for NSE-listed stocks using Screener.in + Yahoo Finance. Not financial advice.")
 
 # Mandatory Disclaimer
 st.warning("""
@@ -24,122 +25,137 @@ if ticker_input:
     symbol = ticker_input.strip().upper()
     
     @st.cache_data(ttl=3600)
-    def scrape_nse_data(symbol):
-        url = f"https://www.nseindia.com/get-quote/equity/{symbol}"
-        
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'same-origin',
-            'Sec-Fetch-User': '?1',
-            'Cache-Control': 'max-age=0'
-        }
+    def get_yahoo_data(symbol):
+        try:
+            stock = yf.Ticker(symbol + ".NS")  # Add .NS for Indian stocks
+            info = stock.info
+            hist = stock.history(period="1d")
+            current_price = hist['Close'].iloc[-1] if len(hist) > 0 else "N/A"
+            return info, current_price
+        except Exception as e:
+            return None, f"Error: {str(e)}"
+
+    @st.cache_data(ttl=3600)
+    def scrape_screener(symbol):
+        # Convert to Screener format (e.g., RELIANCE → reliance)
+        screener_id = symbol.lower()
+        url = f"https://www.screener.in/company/{screener_id}/"
         
         try:
-            session = requests.Session()
-            session.headers.update(headers)
-            
-            # First, get cookies by visiting homepage
-            session.get("https://www.nseindia.com", timeout=10)
-            
-            # Then fetch quote page
-            response = session.get(url, timeout=10)
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            response = requests.get(url, headers=headers, timeout=10)
             
             if response.status_code != 200:
                 return None
             
             soup = BeautifulSoup(response.content, 'html.parser')
             
-            # Extract key metrics
-            data = {}
+            # Extract key metrics from Screener
+            metrics = {}
             
-            # Current Price
-            price_elem = soup.find('div', class_='last-price')
-            if price_elem:
-                data['current_price'] = price_elem.get_text(strip=True).replace(',', '')
-            
-            # P/E Ratio (Adjusted P/E)
-            pe_elem = soup.find('div', text=lambda x: x and 'Adjusted P/E' in x)
+            # P/E Ratio
+            pe_elem = soup.find('li', text=lambda x: x and 'P/E Ratio' in x)
             if pe_elem:
-                pe_value = pe_elem.find_next('div').get_text(strip=True)
-                data['pe_ratio'] = pe_value.replace(',', '') if pe_value.replace(',', '').replace('.', '').isdigit() else "N/A"
+                pe_text = pe_elem.find_next('span').get_text(strip=True)
+                metrics['pe_ratio'] = float(pe_text.replace(',', '')) if pe_text.replace(',', '').replace('.', '').isdigit() else "N/A"
             
-            # Market Cap
-            mc_elem = soup.find('div', text=lambda x: x and 'Total Market Cap' in x)
-            if mc_elem:
-                mc_value = mc_elem.find_next('div').get_text(strip=True)
-                data['market_cap'] = mc_value
+            # P/B Ratio
+            pb_elem = soup.find('li', text=lambda x: x and 'P/B Ratio' in x)
+            if pb_elem:
+                pb_text = pb_elem.find_next('span').get_text(strip=True)
+                metrics['pb_ratio'] = float(pb_text.replace(',', '')) if pb_text.replace(',', '').replace('.', '').isdigit() else "N/A"
             
-            # 52 Week High & Low
-            high_elem = soup.find('div', text=lambda x: x and '52 Week High' in x)
-            low_elem = soup.find('div', text=lambda x: x and '52 Week Low' in x)
-            if high_elem:
-                data['52w_high'] = high_elem.find_next('div').get_text(strip=True)
-            if low_elem:
-                data['52w_low'] = low_elem.find_next('div').get_text(strip=True)
+            # Dividend Yield
+            div_elem = soup.find('li', text=lambda x: x and 'Dividend Yield' in x)
+            if div_elem:
+                div_text = div_elem.find_next('span').get_text(strip=True)
+                metrics['dividend_yield'] = float(div_text.replace('%', '').replace(',', '')) if '%' in div_text else "N/A"
             
-            # Trading Status
-            status_elem = soup.find('div', text=lambda x: x and 'Trading Status' in x)
-            if status_elem:
-                data['trading_status'] = status_elem.find_next('div').get_text(strip=True)
+            # PEG Ratio
+            peg_elem = soup.find('li', text=lambda x: x and 'PEG Ratio' in x)
+            if peg_elem:
+                peg_text = peg_elem.find_next('span').get_text(strip=True)
+                metrics['peg_ratio'] = float(peg_text.replace(',', '')) if peg_text.replace(',', '').replace('.', '').isdigit() else "N/A"
             
-            return data
+            return metrics
             
         except Exception as e:
             return None
 
     with st.spinner(f"Fetching data for {symbol}..."):
-        nse_data = scrape_nse_data(symbol)
-        
-        if not nse_data:
-            st.error("❌ Data not found. Try:")
-            st.markdown("""
-            - **Valid NSE symbols**: `RELIANCE`, `TCS`, `HDFCBANK`, `INFY`, `SBIN`
-            - Avoid `.NS` suffix — just use `TCS`, not `TCS.NS`
-            """)
+        # Get Yahoo data
+        info, current_price = get_yahoo_data(symbol)
+        if info is None:
+            st.error(current_price)
+            st.info("Try a different ticker like `TCS`, `RELIANCE`, or `HDFCBANK`.")
             st.stop()
 
-        # Display header
-        st.subheader(f"{symbol} • NSE")
-        st.metric("Current Price", f"₹{nse_data.get('current_price', 'N/A')}")
+        # Get Screener data
+        screener_data = scrape_screener(symbol)
+        
+        # Initialize final metrics
+        final_metrics = {
+            "P/E Ratio": info.get("trailingPE", "N/A"),
+            "P/B Ratio": info.get("priceToBook", "N/A"),
+            "PEG Ratio": info.get("pegRatio", "N/A"),
+            "Dividend Yield": info.get("dividendYield", 0)*100 if info.get("dividendYield") else "N/A",
+            "50-Day MA": info.get("fiftyDayAverage", "N/A"),
+            "200-Day MA": info.get("twoHundredDayAverage", "N/A")
+        }
 
-        # Valuation Metrics
-        st.subheader("Valuation Metrics (Official NSE Data)")
+        # If Screener data is available, update metrics
+        if screener_data:
+            if screener_data.get('pe_ratio') != "N/A":
+                final_metrics["P/E Ratio"] = screener_data['pe_ratio']
+            if screener_data.get('pb_ratio') != "N/A":
+                final_metrics["P/B Ratio"] = screener_data['pb_ratio']
+            if screener_data.get('dividend_yield') != "N/A":
+                final_metrics["Dividend Yield"] = screener_data['dividend_yield']
+            if screener_data.get('peg_ratio') != "N/A":
+                final_metrics["PEG Ratio"] = screener_data['peg_ratio']
+
+        # Display header
+        company_name = info.get("longName", symbol)
+        st.subheader(f"{company_name} • {symbol}.NS")
+        st.metric("Current Price", f"₹{current_price:.2f}" if isinstance(current_price, float) else current_price)
+
+        # Valuation metrics table
+        st.subheader("Valuation Metrics (Latest)")
         metrics_list = [
-            ("P/E Ratio", nse_data.get("pe_ratio", "N/A")),
-            ("Market Cap", nse_data.get("market_cap", "N/A")),
-            ("52-Week High", nse_data.get("52w_high", "N/A")),
-            ("52-Week Low", nse_data.get("52w_low", "N/A")),
-            ("Trading Status", nse_data.get("trading_status", "N/A"))
+            ("P/E Ratio", final_metrics["P/E Ratio"]),
+            ("P/B Ratio", final_metrics["P/B Ratio"]),
+            ("PEG Ratio", final_metrics["PEG Ratio"]),
+            ("Dividend Yield", f"{final_metrics['Dividend Yield']:.2f}%" if isinstance(final_metrics['Dividend Yield'], (int, float)) else final_metrics['Dividend Yield']),
+            ("50-Day MA", final_metrics["50-Day MA"]),
+            ("200-Day MA", final_metrics["200-Day MA"])
         ]
         df = pd.DataFrame(metrics_list, columns=["Metric", "Value"])
         st.table(df)
 
-        # Educational Insights
+        # Educational insights
         st.subheader("Educational Insights")
-        pe = nse_data.get("pe_ratio", "N/A")
-        if isinstance(pe, str) and pe.replace('.', '').isdigit():
-            pe = float(pe)
-            if pe < 15:
-                st.info("✅ P/E suggests undervaluation")
-            elif pe > 25:
-                st.info("⚠️ P/E suggests overvaluation")
-        else:
-            st.info("📊 P/E data not available")
+        pe = final_metrics["P/E Ratio"]
+        pb = final_metrics["P/B Ratio"]
+        peg = final_metrics["PEG Ratio"]
+
+        insights = []
+        if isinstance(pe, (int, float)) and pe < 15: insights.append("✅ P/E suggests undervaluation")
+        elif isinstance(pe, (int, float)) and pe > 25: insights.append("⚠️ P/E suggests overvaluation")
+        if isinstance(pb, (int, float)) and pb < 1.5: insights.append("✅ P/B suggests asset-backed value")
+        elif isinstance(pb, (int, float)) and pb > 3: insights.append("⚠️ P/B suggests premium pricing")
+        if isinstance(peg, (int, float)) and peg < 1: insights.append("✅ PEG < 1: growth may be undervalued")
+        elif isinstance(peg, (int, float)) and peg > 2: insights.append("⚠️ PEG > 2: growth may be overpriced")
+
+        for msg in insights or ["No strong valuation signals detected."]:
+            st.info(msg)
 
 # Ticker Guide
 st.markdown("---")
 st.subheader("How to Use (NSE Only)")
 st.markdown("""
 - **Enter NSE symbol only** → e.g., `RELIANCE`, `TCS`, `HDFCBANK`
-- **No .NS suffix needed** — we auto-detect NSE
+- **No .NS suffix needed** — we auto-add it for Yahoo Finance
 - **Not for BSE or global stocks** — this is NSE-only
 """)
 
-st.caption("Data: NSE India (official) | Educational Use Only")
+st.caption("Data: Screener.in + Yahoo Finance | Educational Use Only")
