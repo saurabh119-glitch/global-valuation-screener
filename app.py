@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 
 st.set_page_config(page_title="NSE Valuation Screener", page_icon="📈")
 st.title("🇮🇳 NSE Stock Valuation Screener (Educational)")
-st.caption("Compare metrics for NSE-listed stocks using Moneycontrol + Yahoo Finance. Not financial advice.")
+st.caption("Compare metrics for NSE-listed stocks using Screener.in + Yahoo Finance. Not financial advice.")
 
 # Mandatory Disclaimer
 st.warning("""
@@ -36,76 +36,56 @@ if ticker_input:
             return None, f"Error: {str(e)}"
 
     @st.cache_data(ttl=3600)
-    def scrape_moneycontrol(symbol):
-        # Convert to Moneycontrol format (e.g., RELIANCE → reliance)
-        moneycontrol_id = symbol.lower()
-        url = f"https://www.moneycontrol.com/india/stockpricequote/{moneycontrol_id}/{moneycontrol_id}"
+    def scrape_screener(symbol):
+        # Convert to Screener format (e.g., RELIANCE → reliance)
+        screener_id = symbol.lower()
+        url = f"https://www.screener.in/company/{screener_id}/"
         
         try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'same-origin',
-                'Sec-Fetch-User': '?1',
-                'Cache-Control': 'max-age=0'
-            }
-            
-            session = requests.Session()
-            session.headers.update(headers)
-            
-            # First, get cookies by visiting homepage
-            session.get("https://www.moneycontrol.com", timeout=10)
-            
-            # Then fetch quote page
-            response = session.get(url, timeout=10)
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            response = requests.get(url, headers=headers, timeout=10)
             
             if response.status_code != 200:
                 return None
             
             soup = BeautifulSoup(response.content, 'html.parser')
             
-            # Extract key metrics from Moneycontrol
+            # Extract key metrics from Screener
             metrics = {}
             
             # P/E Ratio
-            pe_elem = soup.find('div', text=lambda x: x and 'P/E Ratio' in x)
+            pe_elem = soup.find('li', text=lambda x: x and 'P/E Ratio' in x)
             if pe_elem:
-                pe_value = pe_elem.find_next('div').get_text(strip=True)
+                pe_text = pe_elem.find_next('span').get_text(strip=True)
                 try:
-                    metrics['pe_ratio'] = float(pe_value.replace(',', ''))
+                    metrics['pe_ratio'] = float(pe_text.replace(',', ''))
                 except ValueError:
                     metrics['pe_ratio'] = "N/A"
             
             # P/B Ratio
-            pb_elem = soup.find('div', text=lambda x: x and 'P/B Ratio' in x)
+            pb_elem = soup.find('li', text=lambda x: x and 'P/B Ratio' in x)
             if pb_elem:
-                pb_value = pb_elem.find_next('div').get_text(strip=True)
+                pb_text = pb_elem.find_next('span').get_text(strip=True)
                 try:
-                    metrics['pb_ratio'] = float(pb_value.replace(',', ''))
+                    metrics['pb_ratio'] = float(pb_text.replace(',', ''))
                 except ValueError:
                     metrics['pb_ratio'] = "N/A"
             
             # Dividend Yield
-            div_elem = soup.find('div', text=lambda x: x and 'Dividend Yield' in x)
+            div_elem = soup.find('li', text=lambda x: x and 'Dividend Yield' in x)
             if div_elem:
-                div_value = div_elem.find_next('div').get_text(strip=True)
+                div_text = div_elem.find_next('span').get_text(strip=True)
                 try:
-                    metrics['dividend_yield'] = float(div_value.replace('%', '').replace(',', ''))
+                    metrics['dividend_yield'] = float(div_text.replace('%', '').replace(',', ''))
                 except ValueError:
                     metrics['dividend_yield'] = "N/A"
             
             # PEG Ratio
-            peg_elem = soup.find('div', text=lambda x: x and 'PEG Ratio' in x)
+            peg_elem = soup.find('li', text=lambda x: x and 'PEG Ratio' in x)
             if peg_elem:
-                peg_value = peg_elem.find_next('div').get_text(strip=True)
+                peg_text = peg_elem.find_next('span').get_text(strip=True)
                 try:
-                    metrics['peg_ratio'] = float(peg_value.replace(',', ''))
+                    metrics['peg_ratio'] = float(peg_text.replace(',', ''))
                 except ValueError:
                     metrics['peg_ratio'] = "N/A"
             
@@ -122,8 +102,8 @@ if ticker_input:
             st.info("Try a different ticker like `TCS`, `RELIANCE`, or `HDFCBANK`.")
             st.stop()
 
-        # Get Moneycontrol data
-        moneycontrol_data = scrape_moneycontrol(symbol)
+        # Get Screener data
+        screener_data = scrape_screener(symbol)
         
         # Initialize final metrics
         final_metrics = {
@@ -135,16 +115,16 @@ if ticker_input:
             "200-Day MA": info.get("twoHundredDayAverage", "N/A")
         }
 
-        # If Moneycontrol data is available, update metrics
-        if moneycontrol_data:
-            if moneycontrol_data.get('pe_ratio') != "N/A":
-                final_metrics["P/E Ratio"] = moneycontrol_data['pe_ratio']
-            if moneycontrol_data.get('pb_ratio') != "N/A":
-                final_metrics["P/B Ratio"] = moneycontrol_data['pb_ratio']
-            if moneycontrol_data.get('dividend_yield') != "N/A":
-                final_metrics["Dividend Yield"] = moneycontrol_data['dividend_yield']
-            if moneycontrol_data.get('peg_ratio') != "N/A":
-                final_metrics["PEG Ratio"] = moneycontrol_data['peg_ratio']
+        # If Screener data is available, update metrics
+        if screener_data:
+            if screener_data.get('pe_ratio') != "N/A":
+                final_metrics["P/E Ratio"] = screener_data['pe_ratio']
+            if screener_data.get('pb_ratio') != "N/A":
+                final_metrics["P/B Ratio"] = screener_data['pb_ratio']
+            if screener_data.get('dividend_yield') != "N/A":
+                final_metrics["Dividend Yield"] = screener_data['dividend_yield']
+            if screener_data.get('peg_ratio') != "N/A":
+                final_metrics["PEG Ratio"] = screener_data['peg_ratio']
 
         # Display header
         company_name = info.get("longName", symbol)
@@ -190,4 +170,4 @@ st.markdown("""
 - **Not for BSE or global stocks** — this is NSE-only
 """)
 
-st.caption("Data: Moneycontrol + Yahoo Finance | Educational Use Only")
+st.caption("Data: Screener.in + Yahoo Finance | Educational Use Only")
